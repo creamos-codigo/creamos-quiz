@@ -1,65 +1,88 @@
-import Image from "next/image";
+// app/page.tsx
+"use client";
+
+import { useState } from "react";
+import GameBoard from "../components/GameBoard";
+import GameHub from "../components/GameHub";
+import PromptBattle from "../components/PromptBattle";
+
+type View = "hub" | "quiz" | "prompt-battle";
 
 export default function Home() {
-  return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [view, setView] = useState<View>("hub");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (password === "Creamos.123456") {
+      setIsLoggedIn(true);
+      setError("");
+    } else {
+      setError("Incorrect password. Please try again.");
+    }
+  };
+
+  const goHome = () => setView("hub");
+
+  if (isLoggedIn) {
+    return (
+      <main className="min-h-screen p-8 flex flex-col items-center justify-center">
+        {view === "hub" && <GameHub onSelect={setView} />}
+        {view === "quiz" && <GameBoard onBackToHub={goHome} />}
+        {view === "prompt-battle" && <PromptBattle onBackToHub={goHome} />}
       </main>
-    </div>
+    );
+  }
+
+  return (
+    <main className="min-h-screen flex flex-col items-center justify-center p-6">
+      <style>{`
+        @keyframes fadeInUp {
+          from { opacity: 0; transform: translateY(20px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
+
+      <div
+        className="flex flex-col items-center gap-8 w-full max-w-xs text-center"
+        style={{ animation: "fadeInUp 0.7s ease-out" }}
+      >
+        <h1 className="text-6xl font-black text-white tracking-tight">Game time!</h1>
+
+        <form onSubmit={handleLogin} className="flex flex-col gap-3 w-full">
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="w-full px-4 py-3.5 rounded-xl text-white border focus:outline-none transition-colors text-center font-semibold text-lg"
+            style={{ backgroundColor: "#424242", borderColor: "#555555", caretColor: "#fdb648" }}
+            onFocus={(e) => (e.target.style.borderColor = "#fdb648")}
+            onBlur={(e) => (e.target.style.borderColor = "#555555")}
+            placeholder="Enter password"
+          />
+          {error && (
+            <p className="text-sm font-medium" style={{ color: "#fc2560" }}>
+              {error}
+            </p>
+          )}
+          <button
+            type="submit"
+            className="w-full py-3.5 rounded-xl font-extrabold text-lg transition-all duration-200"
+            style={{ backgroundColor: "#fdb648", color: "#333333" }}
+          >
+            Enter
+          </button>
+        </form>
+
+        <img
+          src="/images/Creamos_PrimaryWordmark_WithTagline.svg"
+          alt="Creamos"
+          className="w-32 mt-2"
+          style={{ opacity: 0.45 }}
+        />
+      </div>
+    </main>
   );
 }

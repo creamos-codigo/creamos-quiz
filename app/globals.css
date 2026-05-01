@@ -1,26 +1,31 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@theme {
+  --font-sans: var(--font-poppins), ui-sans-serif, system-ui, sans-serif;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  /* Creamos Brand Colors */
+  --color-creamos-black:    #333333;
+  --color-creamos-yellow:   #fdb648;
+  --color-creamos-blue:     #4d5dfb;
+  --color-creamos-red:      #fc2560;
+  --color-creamos-green:    #25e4a2;
+  --color-creamos-card:     #3d3d3d;
+  --color-creamos-elevated: #424242;
+  --color-creamos-muted:    #888888;
+  --color-creamos-border:   #555555;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  /* Legacy aliases kept for any remaining Tailwind references */
+  --color-creamos-primary:    #fdb648;
+  --color-creamos-secondary:  #333333;
+  --color-creamos-accent:     #fdb648;
+  --color-creamos-background: #333333;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: #333333;
+  color: #ffffff;
+}
+
+input::placeholder {
+  color: #888888;
 }
