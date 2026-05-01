@@ -5,6 +5,10 @@ import { useState, useEffect, useRef } from "react";
 import { supabase } from "../lib/supabase";
 import { quizQuestions, Question } from "../data/questions";
 
+interface GameBoardProps {
+    onBackToHub?: () => void;
+}
+
 // Fixed color per answer slot: A=Blue B=Red C=Yellow D=Green
 const ANSWER_SLOTS = [
     { bg: "#4d5dfb", text: "#ffffff" },
@@ -38,7 +42,7 @@ const podiumColor = (idx: number) => {
     return "#555555";
 };
 
-export default function GameBoard() {
+export default function GameBoard({ onBackToHub }: GameBoardProps) {
     const [playerName, setPlayerName] = useState("");
     const [inLobby, setInLobby] = useState(false);
     const [gameState, setGameState] = useState<"lobby" | "playing" | "finished">("lobby");
@@ -251,11 +255,29 @@ export default function GameBoard() {
         }
     };
 
+    // Small reusable "Back to Games" button — only renders if onBackToHub is wired up
+    const BackToGamesButton = () => {
+        if (!onBackToHub) return null;
+        return (
+            <button
+                onClick={onBackToHub}
+                className="fixed top-4 left-4 z-50 px-4 py-2 rounded-full text-xs font-semibold transition-colors"
+                style={{ backgroundColor: "#424242", color: "#888888" }}
+                onMouseEnter={(e) => { e.currentTarget.style.color = "#fdb648"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = "#888888"; }}
+            >
+                ← Back to Games
+            </button>
+        );
+    };
+
     // --- RENDERING SCREENS ---
 
     // JOIN SCREEN
     if (!inLobby) {
         return (
+            <>
+            <BackToGamesButton />
             <div
                 className="flex flex-col items-center gap-8 py-16 px-6 text-center"
                 style={{ animation: "fadeInUp 0.7s ease-out" }}
@@ -300,6 +322,7 @@ export default function GameBoard() {
                     style={{ opacity: 0.35 }}
                 />
             </div>
+            </>
         );
     }
 
@@ -335,6 +358,8 @@ export default function GameBoard() {
     if (gameState === "lobby") {
         const canStart = players.length >= 2;
         return (
+            <>
+            <BackToGamesButton />
             <div className="text-center w-full max-w-lg py-8 px-4">
                 <style>{`
                     @keyframes fadeInScale {
@@ -458,6 +483,7 @@ export default function GameBoard() {
                     style={{ opacity: 0.35 }}
                 />
             </div>
+            </>
         );
     }
 

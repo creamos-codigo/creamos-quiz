@@ -3,9 +3,14 @@
 
 import { useState } from "react";
 import GameBoard from "../components/GameBoard";
+import GameHub from "../components/GameHub";
+import PromptBattle from "../components/PromptBattle";
+
+type View = "hub" | "quiz" | "prompt-battle";
 
 export default function Home() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [view, setView] = useState<View>("hub");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
@@ -19,10 +24,14 @@ export default function Home() {
     }
   };
 
+  const goHome = () => setView("hub");
+
   if (isLoggedIn) {
     return (
       <main className="min-h-screen p-8 flex flex-col items-center justify-center">
-        <GameBoard />
+        {view === "hub" && <GameHub onSelect={setView} />}
+        {view === "quiz" && <GameBoard onBackToHub={goHome} />}
+        {view === "prompt-battle" && <PromptBattle onBackToHub={goHome} />}
       </main>
     );
   }
@@ -40,7 +49,7 @@ export default function Home() {
         className="flex flex-col items-center gap-8 w-full max-w-xs text-center"
         style={{ animation: "fadeInUp 0.7s ease-out" }}
       >
-        <h1 className="text-6xl font-black text-white tracking-tight">Quiz time!</h1>
+        <h1 className="text-6xl font-black text-white tracking-tight">Game time!</h1>
 
         <form onSubmit={handleLogin} className="flex flex-col gap-3 w-full">
           <input
