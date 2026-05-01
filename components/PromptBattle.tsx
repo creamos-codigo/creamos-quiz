@@ -17,12 +17,12 @@ interface Player {
 interface Submission {
   playerName: string;
   prompt: string;
-  imageUrl: string | null; // null = generation failed
+  imageUrl: string | null;
 }
 
 interface VoteRecord {
   voter: string;
-  votedFor: string; // player name they voted for
+  votedFor: string;
 }
 
 type Phase = "lobby" | "brief" | "writing" | "generating" | "voting" | "reveal" | "finished";
@@ -32,6 +32,11 @@ const WRITING_SECONDS = 30;
 const VOTING_SECONDS = 15;
 const REVEAL_SECONDS = 6;
 const BRIEF_SECONDS = 3;
+
+// Timer SFX behaviour: starts at this many seconds remaining, fades in over 1.5s.
+const WARNING_THRESHOLD = 5;
+const TIMER_TARGET_VOLUME = 0.6;
+const TIMER_FADE_MS = 1500;
 
 const AVATAR_PALETTE = ["#fdb648", "#fc2560", "#4d5dfb", "#25e4a2", "#a78bfa", "#fb923c", "#34d399", "#60a5fa"];
 const AVATAR_TEXT: Record<string, string> = {
@@ -73,7 +78,7 @@ export default function PromptBattle({ onBackToHub }: PromptBattleProps) {
 
   // Round state
   const [roundBriefs, setRoundBriefs] = useState<Brief[]>([]);
-  const [currentRound, setCurrentRound] = useState(0); // 0-indexed
+  const [currentRound, setCurrentRound] = useState(0);
   const [timeLeft, setTimeLeft] = useState(WRITING_SECONDS);
 
   // My submission for this round
@@ -93,24 +98,29 @@ export default function PromptBattle({ onBackToHub }: PromptBattleProps) {
   // Cumulative scoring
   const [scores, setScores] = useState<Record<string, number>>({});
 
-  // Audio
+  // Audio (timer SFX)
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const fadeIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [isMuted, setIsMuted] = useState(false);
 
   // Channel
   const channelRef = useRef<any>(null);
 
   // ─────────────────────────────────────────────────────────────
-  // Audio setup
+  // Audio: timer.wav warning SFX
+  // Plays during the final WARNING_THRESHOLD seconds of writing &
+  // voting phases, fading in from silence to TIMER_TARGET_VOLUME.
+  // Stops cleanly when time hits zero or the phase changes.
   // ─────────────────────────────────────────────────────────────
   useEffect(() => {
-    const audio = new Audio("/music/funky-guitar.mp3");
-    audio.loop = true;
-    audio.volume = 0.7;
+    const audio = new Audio("/music/timer.wav");
+    audio.loop = false;
+    audio.volume = 0;
     audioRef.current = audio;
     return () => {
       audio.pause();
       audio.src = "";
+      if (fadeIntervalRef.current) clearInterval(fadeIntervalRef.current);
     };
   }, []);
 
@@ -118,31 +128,41 @@ export default function PromptBattle({ onBackToHub }: PromptBattleProps) {
     const audio = audioRef.current;
     if (!audio) return;
 
-    const playPhases: Phase[] = ["brief", "writing", "generating", "voting", "reveal"];
-    if (playPhases.includes(phase)) {
+    const inWarningWindow =
+      (phase === "writing" || phase === "voting") &&
+      timeLeft > 0 &&
+      timeLeft <= WARNING_THRESHOLD;
+
+    if (inWarningWindow && audio.paused) {
+      // Start fresh from silence and fade in
+      audio.currentTime = 0;
+      audio.volume = 0;
       audio.play().catch(() => {});
-    } else if (phase === "finished") {
-      // fade out
-      const steps = 30;
-      const stepMs = 100;
-      const decrement = audio.volume / steps;
-      const fade = setInterval(() => {
-        if (audio.volume > decrement) {
-          audio.volume = Math.max(0, audio.volume - decrement);
-        } else {
-          audio.volume = 0;
-          audio.pause();
-          audio.currentTime = 0;
-          clearInterval(fade);
+
+      if (fadeIntervalRef.current) clearInterval(fadeIntervalRef.current);
+
+      const startTime = Date.now();
+      fadeIntervalRef.current = setInterval(() => {
+        if (!audioRef.current) return;
+        const elapsed = Date.now() - startTime;
+        const ratio = Math.min(1, elapsed / TIMER_FADE_MS);
+        audioRef.current.volume = TIMER_TARGET_VOLUME * ratio;
+        if (ratio >= 1 && fadeIntervalRef.current) {
+          clearInterval(fadeIntervalRef.current);
+          fadeIntervalRef.current = null;
         }
-      }, stepMs);
-      return () => clearInterval(fade);
-    } else {
+      }, 50);
+    } else if (!inWarningWindow && !audio.paused) {
+      // Time's up, or we changed phase mid-warning — stop SFX
       audio.pause();
       audio.currentTime = 0;
-      audio.volume = 0.7;
+      audio.volume = 0;
+      if (fadeIntervalRef.current) {
+        clearInterval(fadeIntervalRef.current);
+        fadeIntervalRef.current = null;
+      }
     }
-  }, [phase]);
+  }, [phase, timeLeft]);
 
   const toggleMute = () => {
     if (audioRef.current) {
@@ -174,7 +194,6 @@ export default function PromptBattle({ onBackToHub }: PromptBattleProps) {
         });
       })
       .on("broadcast", { event: "pb_start_game" }, ({ payload }) => {
-        // Use shared briefs from start payload so everyone sees same prompts
         setRoundBriefs(payload.briefs);
         setCurrentRound(0);
         setSubmissions([]);
@@ -269,12 +288,10 @@ export default function PromptBattle({ onBackToHub }: PromptBattleProps) {
   useEffect(() => {
     if (phase !== "writing") return;
     if (timeLeft <= 0) {
-      // Time's up — auto-submit if user typed something, else skip
       if (!mySubmitted) {
         if (myPrompt.trim().length >= 3) {
           submitMyPrompt();
         } else {
-          // Submit a placeholder so we don't block the round
           submitEmpty();
         }
       }
@@ -284,7 +301,7 @@ export default function PromptBattle({ onBackToHub }: PromptBattleProps) {
     return () => clearTimeout(t);
   }, [phase, timeLeft, mySubmitted, myPrompt]);
 
-  // When submissions are complete (one per player), move to voting
+  // When submissions are complete, move to voting
   useEffect(() => {
     if (phase !== "writing" && phase !== "generating") return;
     if (submissions.length >= players.length && players.length > 0 && mySubmitted) {
@@ -371,7 +388,6 @@ export default function PromptBattle({ onBackToHub }: PromptBattleProps) {
     return () => clearTimeout(t);
   }, [phase, timeLeft]);
 
-  // When all players have voted, advance to reveal
   useEffect(() => {
     if (phase !== "voting") return;
     if (votes.length >= players.length && players.length > 0) {
@@ -398,7 +414,6 @@ export default function PromptBattle({ onBackToHub }: PromptBattleProps) {
   useEffect(() => {
     if (phase !== "reveal") return;
 
-    // Tally votes for this round
     const roundScores: Record<string, number> = {};
     votes.forEach((v) => {
       roundScores[v.votedFor] = (roundScores[v.votedFor] || 0) + 100;
@@ -436,7 +451,6 @@ export default function PromptBattle({ onBackToHub }: PromptBattleProps) {
   // Actions
   // ─────────────────────────────────────────────────────────────
   const startGame = () => {
-    // Pick TOTAL_ROUNDS unique briefs and broadcast to everyone
     const shuffled = [...BRIEFS].sort(() => Math.random() - 0.5).slice(0, TOTAL_ROUNDS);
     channelRef.current?.send({
       type: "broadcast",
@@ -450,7 +464,7 @@ export default function PromptBattle({ onBackToHub }: PromptBattleProps) {
   };
 
   // ─────────────────────────────────────────────────────────────
-  // Reusable Back-to-Hub button
+  // Reusable chrome (back button, mute button, footer logo)
   // ─────────────────────────────────────────────────────────────
   const BackToGamesButton = () => {
     if (!onBackToHub) return null;
@@ -484,6 +498,20 @@ export default function PromptBattle({ onBackToHub }: PromptBattleProps) {
         </svg>
       )}
     </button>
+  );
+
+  const FooterLogo = () => (
+    <div
+      className="fixed left-1/2 z-40 pointer-events-none"
+      style={{ bottom: "1rem", transform: "translateX(-50%)" }}
+    >
+      <img
+        src="/images/Creamos_PrimaryWordmark_WithTagline.svg"
+        alt="Creamos"
+        className="w-24"
+        style={{ opacity: 0.3 }}
+      />
+    </div>
   );
 
   // ═════════════════════════════════════════════════════════════
@@ -536,14 +564,8 @@ export default function PromptBattle({ onBackToHub }: PromptBattleProps) {
               Enter the Lobby
             </button>
           </div>
-
-          <img
-            src="/images/Creamos_PrimaryWordmark_WithTagline.svg"
-            alt="Creamos"
-            className="w-28 mt-6 mx-auto block"
-            style={{ opacity: 0.35 }}
-          />
         </div>
+        <FooterLogo />
       </>
     );
   }
@@ -668,14 +690,8 @@ export default function PromptBattle({ onBackToHub }: PromptBattleProps) {
           >
             ↩ Reset Lobby
           </button>
-
-          <img
-            src="/images/Creamos_PrimaryWordmark_WithTagline.svg"
-            alt="Creamos"
-            className="w-28 mt-10 mx-auto block"
-            style={{ opacity: 0.35 }}
-          />
         </div>
+        <FooterLogo />
       </>
     );
   }
@@ -706,6 +722,7 @@ export default function PromptBattle({ onBackToHub }: PromptBattleProps) {
             {brief?.text ?? "..."}
           </h2>
         </div>
+        <FooterLogo />
       </>
     );
   }
@@ -777,11 +794,12 @@ export default function PromptBattle({ onBackToHub }: PromptBattleProps) {
             </button>
           </div>
         </div>
+        <FooterLogo />
       </>
     );
   }
 
-  // GENERATING SCREEN — shown when local user submitted, waiting on others
+  // GENERATING SCREEN
   if (phase === "generating") {
     return (
       <>
@@ -789,11 +807,6 @@ export default function PromptBattle({ onBackToHub }: PromptBattleProps) {
         <div className="flex flex-col items-center justify-center text-center px-6" style={{ minHeight: "50vh" }}>
           <style>{`
             @keyframes spin360 { to { transform: rotate(360deg); } }
-            @keyframes dots {
-              0%, 20% { content: "."; }
-              40%     { content: ".."; }
-              60%, 100% { content: "..."; }
-            }
           `}</style>
           <div
             className="w-16 h-16 rounded-full mb-6"
@@ -810,6 +823,7 @@ export default function PromptBattle({ onBackToHub }: PromptBattleProps) {
             {submissions.length} / {players.length} submissions in
           </p>
         </div>
+        <FooterLogo />
       </>
     );
   }
@@ -821,7 +835,7 @@ export default function PromptBattle({ onBackToHub }: PromptBattleProps) {
     return (
       <>
         <MuteButton />
-        <div className="w-full max-w-5xl">
+        <div className="w-full max-w-5xl pb-16">
           <div
             className="h-1.5 rounded-full mb-6 transition-all duration-1000 ease-linear"
             style={{
@@ -895,6 +909,7 @@ export default function PromptBattle({ onBackToHub }: PromptBattleProps) {
             </p>
           )}
         </div>
+        <FooterLogo />
       </>
     );
   }
@@ -909,7 +924,7 @@ export default function PromptBattle({ onBackToHub }: PromptBattleProps) {
     return (
       <>
         <MuteButton />
-        <div className="w-full max-w-5xl">
+        <div className="w-full max-w-5xl pb-16">
           <h2 className="text-2xl md:text-3xl font-black text-white text-center mb-2">
             Round {currentRound + 1} Results
           </h2>
@@ -970,6 +985,7 @@ export default function PromptBattle({ onBackToHub }: PromptBattleProps) {
             })}
           </div>
         </div>
+        <FooterLogo />
       </>
     );
   }
@@ -980,7 +996,6 @@ export default function PromptBattle({ onBackToHub }: PromptBattleProps) {
       .map(([name, score]) => ({ name, score }))
       .sort((a, b) => b.score - a.score);
 
-    // Include any players who scored zero
     players.forEach((p) => {
       if (!ranked.some((r) => r.name === p.name)) {
         ranked.push({ name: p.name, score: 0 });
@@ -1032,6 +1047,7 @@ export default function PromptBattle({ onBackToHub }: PromptBattleProps) {
             </button>
           </div>
         </div>
+        <FooterLogo />
       </>
     );
   }
